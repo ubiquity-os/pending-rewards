@@ -17,6 +17,12 @@ out/
 .env.test.local
 .env.production.local
 
+# Generated results
+*.md
+*.csv
+nonce-*.md
+pending-*.md
+
 # IDE and Editor files
 .vscode/
 .idea/

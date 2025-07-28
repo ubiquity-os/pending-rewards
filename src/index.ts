@@ -1,9 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import { PERMIT2_ADDRESS } from "@uniswap/permit2-sdk";
 import { Contract } from "ethers";
-import { appendFileSync, writeFileSync } from "fs";
+import { writeFileSync } from "fs";
 import * as path from "path";
 import permit2AbiJson from "./abi/permit2.json";
+import {
+  calculateUserWalletTotals,
+  calculateWalletTotals,
+  generateUserRewardsTable,
+  generateWalletTotalsTable,
+  getAllUniqueTokensFromMaps,
+  PermitData,
+} from "./helpers/formatting";
+import { fetchGitHubUsernames } from "./helpers/github";
 import {
   ERC20_ABI,
   Erc20Wrapper,
@@ -28,8 +37,15 @@ interface PermitRow {
     network: number;
   };
   users: {
+    id: number;
+    location_id: number;
     wallets: {
       address: string;
+    };
+    locations?: {
+      node_id?: string;
+      node_url?: string;
+      user_id?: number;
     };
   };
 }
@@ -56,7 +72,7 @@ async function main() {
   }: { data: PermitRow[] | null; error: SupabaseError | null } = (await supabase
     .from("permits")
     .select(
-      "nonce,partners(wallets(address)),tokens(address,network),users:beneficiary_id(wallets(address)),amount"
+      "nonce,partners(wallets(address)),tokens(address,network),users:beneficiary_id(id,location_id,wallets(address),locations(node_id,node_url,user_id)),amount"
     )
     .not("partners", "is", null)
     .not("tokens", "is", null)
@@ -77,11 +93,19 @@ async function main() {
 
   console.log(`Found ${data.length} permits to check`);
 
-  const csvHeaders =
-    "nonce,amount,partner_address,token_address,network,user_address,is_claimed,token_symbol\n";
-  const csvFile = path.join(process.cwd(), "nonce-results.csv");
-  writeFileSync(csvFile, csvHeaders);
+  // First, collect all unique GitHub user IDs
+  const githubUserIds = new Set<number>();
+  for (const permit of data) {
+    const userId = permit.users?.locations?.user_id;
+    if (userId) {
+      githubUserIds.add(userId);
+    }
+  }
 
+  console.log(`Fetching ${githubUserIds.size} GitHub usernames...`);
+  const githubUsernames = await fetchGitHubUsernames(Array.from(githubUserIds));
+
+  const permits: PermitData[] = [];
   const failedChecks: PermitRow[] = [];
   const batchSize = 20;
 
@@ -97,6 +121,10 @@ async function main() {
         const tokenAddress = permit.tokens?.address;
         const userAddress = permit.users?.wallets?.address;
         const network = permit.tokens?.network;
+        const githubUserId = permit.users?.locations?.user_id;
+        const userName = githubUserId
+          ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
+          : "Unknown User";
 
         if (!partnerAddress || !tokenAddress || !userAddress || !network) {
           console.log(
@@ -129,14 +157,21 @@ async function main() {
           );
         }
 
-        const csvRow = `${permit.nonce},${permit.amount},${partnerAddress},${tokenAddress},${network},${userAddress},${isClaimed},${tokenSymbol}\n`;
-        appendFileSync(csvFile, csvRow);
-
-        return {
+        const permitData: PermitData = {
           nonce: permit.nonce,
-          isClaimed,
+          amount: permit.amount,
+          partnerAddress,
+          tokenAddress,
           tokenSymbol,
+          network,
+          userAddress,
+          userName,
+          isClaimed,
         };
+
+        permits.push(permitData);
+
+        return permitData;
       } catch (error) {
         console.log(`Failed to check permit ${permit.nonce}:`, error);
         failedChecks.push(permit);
@@ -150,7 +185,6 @@ async function main() {
   }
 
   console.log(`\nProcessing complete!`);
-  console.log(`Results written to: ${csvFile}`);
   console.log(`Failed checks: ${failedChecks.length}`);
 
   if (failedChecks.length > 0) {
@@ -164,6 +198,10 @@ async function main() {
         const tokenAddress = permit.tokens?.address;
         const userAddress = permit.users?.wallets?.address;
         const network = permit.tokens?.network;
+        const githubUserId = permit.users?.locations?.user_id;
+        const userName = githubUserId
+          ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
+          : "Unknown User";
 
         if (!partnerAddress || !tokenAddress || !userAddress || !network) {
           console.log(
@@ -196,8 +234,19 @@ async function main() {
           );
         }
 
-        const csvRow = `${permit.nonce},${permit.amount},${partnerAddress},${tokenAddress},${network},${userAddress},${isClaimed},${tokenSymbol}\n`;
-        appendFileSync(csvFile, csvRow);
+        const permitData: PermitData = {
+          nonce: permit.nonce,
+          amount: permit.amount,
+          partnerAddress,
+          tokenAddress,
+          tokenSymbol,
+          network,
+          userAddress,
+          userName,
+          isClaimed,
+        };
+
+        permits.push(permitData);
 
         console.log(`✅ Retry successful for permit ${permit.nonce}`);
 
@@ -208,6 +257,50 @@ async function main() {
     }
   }
 
+  const unclaimedPermits = permits.filter((p) => !p.isClaimed);
+
+  const walletToppings = calculateWalletTotals(
+    unclaimedPermits,
+    (permit) => permit.partnerAddress
+  );
+
+  const userRewards = calculateUserWalletTotals(unclaimedPermits);
+
+  const allUniqueTokens = getAllUniqueTokensFromMaps(
+    walletToppings,
+    userRewards
+  );
+
+  const walletToppingsTable = generateWalletTotalsTable(
+    "Wallet Toppings",
+    walletToppings,
+    allUniqueTokens
+  );
+
+  const userRewardsTable = generateUserRewardsTable(
+    "User Rewards",
+    userRewards,
+    allUniqueTokens
+  );
+
+  const markdownContent = `# Pending Rewards
+
+${walletToppingsTable}
+
+${userRewardsTable}
+
+## Summary
+
+- Total permits processed: ${permits.length}
+- Failed checks: ${failedChecks.length}
+- Claimed permits: ${permits.filter((p) => p.isClaimed).length}
+- Unclaimed permits: ${unclaimedPermits.length}
+`;
+
+  const mdFile = path.join(process.cwd(), "pending-rewards.md");
+  writeFileSync(mdFile, markdownContent);
+
+  console.log(`\nMarkdown results written to: ${mdFile}`);
   console.log("All done!");
 }
 

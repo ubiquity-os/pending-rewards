@@ -6,7 +6,7 @@
   "scripts": {
     "start": "bun ./src/index.ts",
     "dev": "bun --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target node"
+    "build": "bun build ./src/index.ts --outdir ./build --target node --env inline"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
