@@ -8,11 +8,6 @@ export const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
 ];
 
-const RPC_URLS: Record<number, string> = {
-  1: process.env.RPC_URL_MAINNET || "https://eth.llamarpc.com",
-  100: process.env.RPC_URL_GNOSIS || "https://rpc.gnosischain.com",
-};
-
 const providerCache = new Map<number, providers.JsonRpcProvider>();
 const contractCache = new Map<string, Contract>();
 
@@ -22,13 +17,16 @@ function getProvider(networkId: number): providers.JsonRpcProvider {
     return cached;
   }
 
-  const rpcUrl = RPC_URLS[networkId];
-  if (!rpcUrl) {
-    throw new Error(`No RPC URL configured for network ${networkId}`);
-  }
+  const rpcUrl = `https://rpc.ubq.fi/${networkId}`;
 
-  const provider = new providers.JsonRpcProvider(rpcUrl);
+  // Create provider with timeout settings
+  const provider = new providers.JsonRpcProvider({
+    url: rpcUrl,
+    timeout: 15000, // 15 second timeout
+  });
+
   providerCache.set(networkId, provider);
+  console.log(`[RPC] Connected to network ${networkId}: ${rpcUrl}`);
   return provider;
 }
 
@@ -54,9 +52,19 @@ export class Erc20Wrapper {
 
   async symbol(): Promise<string> {
     try {
-      return await this._contract.symbol();
+      const startTime = Date.now();
+      const symbol = await this._contract.symbol();
+      const duration = Date.now() - startTime;
+
+      if (duration > 3000) {
+        console.log(
+          `[ERC20] Slow token symbol fetch (${duration}ms): ${symbol}`
+        );
+      }
+
+      return symbol;
     } catch (error) {
-      console.error("Error fetching token symbol:", error);
+      console.error("[ERC20] Error fetching token symbol:", error);
       return "UNKNOWN";
     }
   }
@@ -84,7 +92,23 @@ export class Permit2Wrapper {
   constructor(private _contract: Contract) {}
 
   nonceBitmap(nonce: string | number): { wordPos: BigNumber; bitPos: number } {
-    const nonceBigNumber = BigNumber.from(nonce);
+    let nonceBigNumber: BigNumber;
+
+    try {
+      // Handle large nonce values properly
+      if (typeof nonce === "string") {
+        // If it's already a decimal string, use it directly
+        // Remove any trailing decimals if present
+        const cleanNonce = nonce.includes(".") ? nonce.split(".")[0] : nonce;
+        nonceBigNumber = BigNumber.from(cleanNonce);
+      } else {
+        nonceBigNumber = BigNumber.from(nonce);
+      }
+    } catch (error) {
+      console.error(`Failed to parse nonce ${nonce}:`, error);
+      throw new Error(`Invalid nonce value: ${nonce}`);
+    }
+
     const wordPos = nonceBigNumber.shr(8);
     const bitPos = nonceBigNumber.and(255).toNumber();
     return { wordPos, bitPos };
@@ -97,14 +121,26 @@ export class Permit2Wrapper {
     try {
       const { wordPos, bitPos } = this.nonceBitmap(nonce);
 
+      const startTime = Date.now();
       const bitmap = await this._contract.nonceBitmap(owner, wordPos);
+      const duration = Date.now() - startTime;
+
+      if (duration > 5000) {
+        console.log(
+          `[Permit2] Slow RPC call (${duration}ms) for nonce ${nonce}`
+        );
+      }
+
       const bit = BigNumber.from(1).shl(bitPos);
       const flipped = BigNumber.from(bitmap).xor(bit);
       const isClaimed = bit.and(flipped).eq(0);
 
       return isClaimed;
     } catch (error) {
-      console.error(`Error checking nonce ${nonce} for owner ${owner}:`, error);
+      console.error(
+        `[Permit2] Error checking nonce ${nonce} for owner ${owner}:`,
+        error
+      );
       throw error;
     }
   }

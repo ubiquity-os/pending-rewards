@@ -111,7 +111,7 @@ async function main() {
   logger.section("Permit Processing");
   const permits: PermitData[] = [];
   const failedChecks: PermitRow[] = [];
-  let completedCount = 0;
+  const completed = { count: 0 }; // Use object for shared reference
   let retrySuccessCount = 0;
 
   logger.startSpinner("Processing permits in parallel...");
@@ -131,12 +131,20 @@ async function main() {
         : "Unknown User";
 
       if (!partnerAddress || !tokenAddress || !userAddress || !network) {
-        completedCount++;
+        completed.count++;
         logger.updateSpinner(
-          `Processing permits... ${completedCount}/${data.length} completed`
+          `Processing permits... ${completed.count}/${data.length} completed`
         );
         return null;
       }
+
+      // Show progress for every 50th permit to avoid spam
+      // const shouldLog = completed.count % 50 === 0 || completed.count < 10;
+      // if (shouldLog) {
+      //   console.log(
+      //     `[Progress] Processing permit ${completed.count + 1}/${data.length} (nonce: ${permit.nonce.toString().slice(0, 10)}...)`
+      //   );
+      // }
 
       const permit2Contract = getContract(permit2Address, permit2Abi, network);
       const permit2Wrapper = new Permit2Wrapper(permit2Contract as Contract);
@@ -167,16 +175,25 @@ async function main() {
         isClaimed,
       };
 
-      completedCount++;
+      completed.count++;
+      // if (shouldLog) {
+      //   console.log(
+      //     `[Progress] Completed ${completed.count}/${data.length} (${isClaimed ? "CLAIMED" : "UNCLAIMED"})`
+      //   );
+      // }
       logger.updateSpinner(
-        `Processing permits... ${completedCount}/${data.length} completed`
+        `Processing permits... ${completed.count}/${data.length} completed`
       );
 
       return permitData;
     } catch (error) {
-      completedCount++;
+      completed.count++;
+      console.log(
+        `[Error] Failed permit ${completed.count}/${data.length}:`,
+        error instanceof Error ? error.message : String(error)
+      );
       logger.updateSpinner(
-        `Processing permits... ${completedCount}/${data.length} completed`
+        `Processing permits... ${completed.count}/${data.length} completed`
       );
       failedChecks.push(permit);
       return null;
@@ -199,7 +216,7 @@ async function main() {
 
   if (failedChecks.length > 0) {
     logger.startSpinner(`Retrying ${failedChecks.length} failed permits...`);
-    let retryCompleted = 0;
+    const retryCompleted = { count: 0 }; // Use object for shared reference
 
     const retryResults = await Promise.all(
       failedChecks.map(async (permit) => {
@@ -214,9 +231,9 @@ async function main() {
             : "Unknown User";
 
           if (!partnerAddress || !tokenAddress || !userAddress || !network) {
-            retryCompleted++;
+            retryCompleted.count++;
             logger.updateSpinner(
-              `Retrying permits... ${retryCompleted}/${failedChecks.length}`
+              `Retrying permits... ${retryCompleted.count}/${failedChecks.length}`
             );
             return null;
           }
@@ -256,16 +273,16 @@ async function main() {
             isClaimed,
           };
 
-          retryCompleted++;
+          retryCompleted.count++;
           logger.updateSpinner(
-            `Retrying permits... ${retryCompleted}/${failedChecks.length}`
+            `Retrying permits... ${retryCompleted.count}/${failedChecks.length}`
           );
           retrySuccessCount++;
           return permitData;
         } catch (error) {
-          retryCompleted++;
+          retryCompleted.count++;
           logger.updateSpinner(
-            `Retrying permits... ${retryCompleted}/${failedChecks.length}`
+            `Retrying permits... ${retryCompleted.count}/${failedChecks.length}`
           );
           return null;
         }
