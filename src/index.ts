@@ -38,14 +38,8 @@ interface PermitRow {
   };
   users: {
     id: number;
-    location_id: number;
     wallets: {
       address: string;
-    };
-    locations?: {
-      node_id?: string;
-      node_url?: string;
-      user_id?: number;
     };
   };
 }
@@ -72,7 +66,7 @@ async function main() {
   }: { data: PermitRow[] | null; error: SupabaseError | null } = (await supabase
     .from("permits")
     .select(
-      "nonce,partners(wallets(address)),tokens(address,network),users:beneficiary_id(id,location_id,wallets(address),locations(node_id,node_url,user_id)),amount"
+      "nonce,partners(wallets(address)),tokens(address,network),users:beneficiary_id(id,wallets(address)),amount"
     )
     .not("partners", "is", null)
     .not("tokens", "is", null)
@@ -93,10 +87,35 @@ async function main() {
 
   console.log(`Found ${data.length} permits to check`);
 
+  // Debug: Check for wallets starting with 0x4007
+  const wallet4007Permits = data.filter(
+    (permit) =>
+      permit.users?.wallets?.address?.toLowerCase().startsWith("0x4007") ||
+      permit.partners?.wallets?.address?.toLowerCase().startsWith("0x4007")
+  );
+
+  if (wallet4007Permits.length > 0) {
+    console.log(
+      `\n🔍 Found ${wallet4007Permits.length} permits with wallets starting with 0x4007:`
+    );
+    wallet4007Permits.forEach((permit) => {
+      console.log(`  Nonce: ${permit.nonce}`);
+      console.log(`  User wallet: ${permit.users?.wallets?.address}`);
+      console.log(`  Partner wallet: ${permit.partners?.wallets?.address}`);
+      console.log(`  Amount: ${permit.amount}`);
+      console.log(
+        `  Token: ${permit.tokens?.address} (Network: ${permit.tokens?.network})`
+      );
+      console.log("");
+    });
+  } else {
+    console.log(`\n❌ No permits found with wallets starting with 0x4007`);
+  }
+
   // First, collect all unique GitHub user IDs
   const githubUserIds = new Set<number>();
   for (const permit of data) {
-    const userId = permit.users?.locations?.user_id;
+    const userId = permit.users?.id;
     if (userId) {
       githubUserIds.add(userId);
     }
@@ -121,7 +140,7 @@ async function main() {
         const tokenAddress = permit.tokens?.address;
         const userAddress = permit.users?.wallets?.address;
         const network = permit.tokens?.network;
-        const githubUserId = permit.users?.locations?.user_id;
+        const githubUserId = permit.users?.id;
         const userName = githubUserId
           ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
           : "Unknown User";
@@ -198,7 +217,7 @@ async function main() {
         const tokenAddress = permit.tokens?.address;
         const userAddress = permit.users?.wallets?.address;
         const network = permit.tokens?.network;
-        const githubUserId = permit.users?.locations?.user_id;
+        const githubUserId = permit.users?.id;
         const userName = githubUserId
           ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
           : "Unknown User";
