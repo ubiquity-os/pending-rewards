@@ -13,6 +13,7 @@ import {
   PermitData,
 } from "./helpers/formatting";
 import { fetchGitHubUsernames } from "./helpers/github";
+import { Logger } from "./helpers/logger";
 import {
   ERC20_ABI,
   Erc20Wrapper,
@@ -52,14 +53,20 @@ interface SupabaseError {
 }
 
 async function main() {
+  const logger = new Logger();
   const permit2Address = PERMIT2_ADDRESS;
+
+  logger.section("Nonce Checker - Permit Analysis");
+
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
   if (!supabaseUrl || !supabaseKey) {
+    logger.error("Missing Supabase environment variables");
     throw new Error("Missing Supabase environment variables");
   }
   const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
+  logger.startSpinner("Fetching permits from database...");
   const {
     data,
     error,
@@ -76,41 +83,17 @@ async function main() {
   };
 
   if (error) {
-    console.error("Error fetching permits:", error);
+    logger.stopSpinner("Failed to fetch permits", true);
+    logger.error(`Database error: ${error.message}`);
     return;
   }
 
   if (!data) {
-    console.log("No permits found");
+    logger.stopSpinner("No permits found in database", true);
     return;
   }
 
-  console.log(`Found ${data.length} permits to check`);
-
-  // Debug: Check for wallets starting with 0x4007
-  const wallet4007Permits = data.filter(
-    (permit) =>
-      permit.users?.wallets?.address?.toLowerCase().startsWith("0x4007") ||
-      permit.partners?.wallets?.address?.toLowerCase().startsWith("0x4007")
-  );
-
-  if (wallet4007Permits.length > 0) {
-    console.log(
-      `\n🔍 Found ${wallet4007Permits.length} permits with wallets starting with 0x4007:`
-    );
-    wallet4007Permits.forEach((permit) => {
-      console.log(`  Nonce: ${permit.nonce}`);
-      console.log(`  User wallet: ${permit.users?.wallets?.address}`);
-      console.log(`  Partner wallet: ${permit.partners?.wallets?.address}`);
-      console.log(`  Amount: ${permit.amount}`);
-      console.log(
-        `  Token: ${permit.tokens?.address} (Network: ${permit.tokens?.network})`
-      );
-      console.log("");
-    });
-  } else {
-    console.log(`\n❌ No permits found with wallets starting with 0x4007`);
-  }
+  logger.stopSpinner(`Found ${data.length} permits to analyze`);
 
   // First, collect all unique GitHub user IDs
   const githubUserIds = new Set<number>();
@@ -121,163 +104,203 @@ async function main() {
     }
   }
 
-  console.log(`Fetching ${githubUserIds.size} GitHub usernames...`);
+  logger.startSpinner(`Fetching GitHub usernames...`);
   const githubUsernames = await fetchGitHubUsernames(Array.from(githubUserIds));
+  logger.stopSpinner(`GitHub usernames retrieved`);
 
+  logger.section("Permit Processing");
   const permits: PermitData[] = [];
   const failedChecks: PermitRow[] = [];
-  const batchSize = 20;
+  let completedCount = 0;
+  let retrySuccessCount = 0;
 
-  for (let i = 0; i < data.length; i += batchSize) {
-    const batch = data.slice(i, i + batchSize);
-    console.log(
-      `Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(data.length / batchSize)} (${batch.length} items)`
-    );
+  logger.startSpinner("Processing permits in parallel...");
 
-    const batchPromises = batch.map(async (permit) => {
+  // Process all permits in parallel with progress tracking
+  const processPermit = async (
+    permit: PermitRow
+  ): Promise<PermitData | null> => {
+    try {
+      const partnerAddress = permit.partners?.wallets?.address;
+      const tokenAddress = permit.tokens?.address;
+      const userAddress = permit.users?.wallets?.address;
+      const network = permit.tokens?.network;
+      const githubUserId = permit.users?.id;
+      const userName = githubUserId
+        ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
+        : "Unknown User";
+
+      if (!partnerAddress || !tokenAddress || !userAddress || !network) {
+        completedCount++;
+        logger.updateSpinner(
+          `Processing permits... ${completedCount}/${data.length} completed`
+        );
+        return null;
+      }
+
+      const permit2Contract = getContract(permit2Address, permit2Abi, network);
+      const permit2Wrapper = new Permit2Wrapper(permit2Contract as Contract);
+
+      const isClaimed = await permit2Wrapper.isNonceClaimed(
+        partnerAddress,
+        permit.nonce
+      );
+
+      let tokenSymbol = "UNKNOWN";
       try {
-        const partnerAddress = permit.partners?.wallets?.address;
-        const tokenAddress = permit.tokens?.address;
-        const userAddress = permit.users?.wallets?.address;
-        const network = permit.tokens?.network;
-        const githubUserId = permit.users?.id;
-        const userName = githubUserId
-          ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
-          : "Unknown User";
+        const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
+        const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
+        tokenSymbol = await erc20Wrapper.symbol();
+      } catch (symbolError) {
+        // Token symbol fetch failed - continue with UNKNOWN
+      }
 
-        if (!partnerAddress || !tokenAddress || !userAddress || !network) {
-          console.log(
-            `Skipping permit ${permit.nonce} - missing required data`
+      const permitData: PermitData = {
+        nonce: permit.nonce,
+        amount: permit.amount,
+        partnerAddress,
+        tokenAddress,
+        tokenSymbol,
+        network,
+        userAddress,
+        userName,
+        isClaimed,
+      };
+
+      completedCount++;
+      logger.updateSpinner(
+        `Processing permits... ${completedCount}/${data.length} completed`
+      );
+
+      return permitData;
+    } catch (error) {
+      completedCount++;
+      logger.updateSpinner(
+        `Processing permits... ${completedCount}/${data.length} completed`
+      );
+      failedChecks.push(permit);
+      return null;
+    }
+  };
+
+  // Process all permits in parallel
+  const results = await Promise.all(data.map(processPermit));
+
+  // Collect successful results
+  results.forEach((result) => {
+    if (result) {
+      permits.push(result);
+    }
+  });
+
+  logger.stopSpinner(
+    `Completed: ${permits.length}/${data.length} permits processed successfully`
+  );
+
+  if (failedChecks.length > 0) {
+    logger.startSpinner(`Retrying ${failedChecks.length} failed permits...`);
+    let retryCompleted = 0;
+
+    const retryResults = await Promise.all(
+      failedChecks.map(async (permit) => {
+        try {
+          const partnerAddress = permit.partners?.wallets?.address;
+          const tokenAddress = permit.tokens?.address;
+          const userAddress = permit.users?.wallets?.address;
+          const network = permit.tokens?.network;
+          const githubUserId = permit.users?.id;
+          const userName = githubUserId
+            ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
+            : "Unknown User";
+
+          if (!partnerAddress || !tokenAddress || !userAddress || !network) {
+            retryCompleted++;
+            logger.updateSpinner(
+              `Retrying permits... ${retryCompleted}/${failedChecks.length}`
+            );
+            return null;
+          }
+
+          const permit2Contract = getContract(
+            permit2Address,
+            permit2Abi,
+            network
+          );
+          const permit2Wrapper = new Permit2Wrapper(
+            permit2Contract as Contract
+          );
+
+          const isClaimed = await permit2Wrapper.isNonceClaimed(
+            partnerAddress,
+            permit.nonce
+          );
+
+          let tokenSymbol = "UNKNOWN";
+          try {
+            const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
+            const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
+            tokenSymbol = await erc20Wrapper.symbol();
+          } catch (symbolError) {
+            // Token symbol fetch failed - continue with UNKNOWN
+          }
+
+          const permitData: PermitData = {
+            nonce: permit.nonce,
+            amount: permit.amount,
+            partnerAddress,
+            tokenAddress,
+            tokenSymbol,
+            network,
+            userAddress,
+            userName,
+            isClaimed,
+          };
+
+          retryCompleted++;
+          logger.updateSpinner(
+            `Retrying permits... ${retryCompleted}/${failedChecks.length}`
+          );
+          retrySuccessCount++;
+          return permitData;
+        } catch (error) {
+          retryCompleted++;
+          logger.updateSpinner(
+            `Retrying permits... ${retryCompleted}/${failedChecks.length}`
           );
           return null;
         }
+      })
+    );
 
-        const permit2Contract = getContract(
-          permit2Address,
-          permit2Abi,
-          network
-        );
-        const permit2Wrapper = new Permit2Wrapper(permit2Contract as Contract);
-
-        const isClaimed = await permit2Wrapper.isNonceClaimed(
-          partnerAddress,
-          permit.nonce
-        );
-
-        let tokenSymbol = "UNKNOWN";
-        try {
-          const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
-          const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
-          tokenSymbol = await erc20Wrapper.symbol();
-        } catch (symbolError) {
-          console.log(
-            `Could not fetch symbol for token ${tokenAddress}:`,
-            symbolError
-          );
-        }
-
-        const permitData: PermitData = {
-          nonce: permit.nonce,
-          amount: permit.amount,
-          partnerAddress,
-          tokenAddress,
-          tokenSymbol,
-          network,
-          userAddress,
-          userName,
-          isClaimed,
-        };
-
-        permits.push(permitData);
-
-        return permitData;
-      } catch (error) {
-        console.log(`Failed to check permit ${permit.nonce}:`, error);
-        failedChecks.push(permit);
-        return null;
+    // Add successful retries to permits
+    retryResults.forEach((result) => {
+      if (result) {
+        permits.push(result);
       }
     });
 
-    const results = await Promise.all(batchPromises);
-    const successCount = results.filter((r) => r !== null).length;
-    console.log(`Batch completed: ${successCount}/${batch.length} successful`);
-  }
-
-  console.log(`\nProcessing complete!`);
-  console.log(`Failed checks: ${failedChecks.length}`);
-
-  if (failedChecks.length > 0) {
-    console.log("\nRetrying failed checks...");
-
-    for (const permit of failedChecks) {
-      try {
-        console.log(`Retrying permit ${permit.nonce}...`);
-
-        const partnerAddress = permit.partners?.wallets?.address;
-        const tokenAddress = permit.tokens?.address;
-        const userAddress = permit.users?.wallets?.address;
-        const network = permit.tokens?.network;
-        const githubUserId = permit.users?.id;
-        const userName = githubUserId
-          ? githubUsernames.get(githubUserId) || `user-${githubUserId}`
-          : "Unknown User";
-
-        if (!partnerAddress || !tokenAddress || !userAddress || !network) {
-          console.log(
-            `Skipping permit ${permit.nonce} - missing required data`
-          );
-          continue;
-        }
-
-        const permit2Contract = getContract(
-          permit2Address,
-          permit2Abi,
-          network
-        );
-        const permit2Wrapper = new Permit2Wrapper(permit2Contract as Contract);
-
-        const isClaimed = await permit2Wrapper.isNonceClaimed(
-          partnerAddress,
-          permit.nonce
-        );
-
-        let tokenSymbol = "UNKNOWN";
-        try {
-          const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
-          const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
-          tokenSymbol = await erc20Wrapper.symbol();
-        } catch (symbolError) {
-          console.log(
-            `Could not fetch symbol for token ${tokenAddress}:`,
-            symbolError
-          );
-        }
-
-        const permitData: PermitData = {
-          nonce: permit.nonce,
-          amount: permit.amount,
-          partnerAddress,
-          tokenAddress,
-          tokenSymbol,
-          network,
-          userAddress,
-          userName,
-          isClaimed,
-        };
-
-        permits.push(permitData);
-
-        console.log(`✅ Retry successful for permit ${permit.nonce}`);
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      } catch (error) {
-        console.log(`❌ Retry failed for permit ${permit.nonce}:`, error);
-      }
-    }
+    logger.stopSpinner(
+      `Retries completed: ${retrySuccessCount}/${failedChecks.length} successful`
+    );
   }
 
   const unclaimedPermits = permits.filter((p) => !p.isClaimed);
+  const claimedPermits = permits.filter((p) => p.isClaimed);
 
+  logger.section("Final Results");
+  logger.info(`Total permits processed: ${permits.length}`);
+  logger.info(`Claimed permits: ${claimedPermits.length}`);
+  logger.info(`Unclaimed permits: ${unclaimedPermits.length}`);
+  logger.info(
+    `Final failed checks: ${failedChecks.length - retrySuccessCount}`
+  );
+
+  if (unclaimedPermits.length === 0) {
+    logger.info("No unclaimed permits found - skipping report generation");
+    return;
+  }
+
+  logger.startSpinner("Generating wallet toppings analysis...");
   const walletToppings = calculateWalletTotals(
     unclaimedPermits,
     (permit) => permit.partnerAddress
@@ -301,7 +324,9 @@ async function main() {
     userRewards,
     allUniqueTokens
   );
+  logger.stopSpinner("Analysis tables generated");
 
+  logger.startSpinner("Writing results to markdown file...");
   const markdownContent = `# Pending Rewards
 
 ${walletToppingsTable}
@@ -318,9 +343,9 @@ ${userRewardsTable}
 
   const mdFile = path.join(process.cwd(), "pending-rewards.md");
   writeFileSync(mdFile, markdownContent);
+  logger.stopSpinner("Results written to pending-rewards.md");
 
-  console.log(`\nMarkdown results written to: ${mdFile}`);
-  console.log("All done!");
+  logger.fileOutput(mdFile);
 }
 
 main().catch(console.error);
