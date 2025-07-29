@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.3...v1.0.4) (2025-07-29)
+
+
+### Bug Fixes
+
+* add missing NPM_CONFIG_TOKEN in release workflow ([b8043b2](https://github.com/ubiquity-os/pending-rewards/commit/b8043b2a31855dd4b4e83e2e9a925eabcb97e354))
+* write npm token to correct file and add debug step in release workflow ([f507b2a](https://github.com/ubiquity-os/pending-rewards/commit/f507b2af9e5afafaad5c6d7db2d8a3b0ff761fc8))
+
 ## [1.0.3](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.2...v1.0.3) (2025-07-29)
 
 
