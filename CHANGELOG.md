@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.6](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.5...v1.0.6) (2025-07-29)
+
+
+### Bug Fixes
+
+* update build script to add CJS format and node shebang ([88f4291](https://github.com/ubiquity-os/pending-rewards/commit/88f4291a7eff7413dba4bacafa8c7ee8498d0e47))
+* use frozen lockfile for bun install in release workflow ([1dec172](https://github.com/ubiquity-os/pending-rewards/commit/1dec1722c62a267398bad2c863adf27c51a04992))
+
 ## [1.0.5](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.4...v1.0.5) (2025-07-29)
 
 
