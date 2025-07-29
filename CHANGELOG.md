@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.8](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.7...v1.0.8) (2025-07-29)
+
+
+### Bug Fixes
+
+* added proper environment ([5ebbe1e](https://github.com/ubiquity-os/pending-rewards/commit/5ebbe1e5cf895280bbd47f3a0c8dae95255c7bfe))
+
 ## [1.0.7](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.6...v1.0.7) (2025-07-29)
 
 
