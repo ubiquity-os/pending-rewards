@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.2...v1.0.3) (2025-07-29)
+
+
+### Bug Fixes
+
+* update token variable name in release workflow for NPM authentication ([d906b94](https://github.com/ubiquity-os/pending-rewards/commit/d906b94cd6f7d23e0adeeb1cd6a239661d42c33a))
+
 ## [1.0.2](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.1...v1.0.2) (2025-07-29)
 
 
