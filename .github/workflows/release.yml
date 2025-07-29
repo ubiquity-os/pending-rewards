@@ -45,13 +45,12 @@ jobs:
       - name: Build package
         run: bun run build
 
-      - name: Setup NPM authentication
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ./.npmrc
-          ls -la
+#      - name: Setup NPM authentication
+#        run: |
+#          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ./.npmrc
+#          ls -la
 
       - name: Publish to NPM
         run: bun publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
