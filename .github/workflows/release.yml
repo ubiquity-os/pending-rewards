@@ -10,6 +10,10 @@ permissions:
   pull-requests: write
   issues: write
 
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -44,9 +48,6 @@ jobs:
 
       - name: Build package
         run: bun run build
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Publish to NPM
         run: bun publish --access public
