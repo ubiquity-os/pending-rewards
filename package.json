@@ -1,6 +1,6 @@
 {
   "name": "@ubiquity-os/pending-rewards",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Standalone tool to check pending rewards by verifying nonces on the Permit2 contract",
   "bin": {
     "pending-rewards": "./build/index.js"
