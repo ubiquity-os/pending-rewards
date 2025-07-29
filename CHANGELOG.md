@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.9](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.8...v1.0.9) (2025-07-29)
+
+
+### Bug Fixes
+
+* move Supabase environment variables to workflow-level configuration ([9d81f22](https://github.com/ubiquity-os/pending-rewards/commit/9d81f221b6fdb8612695eaf0fefb5d21bc3d1665))
+
 ## [1.0.8](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.7...v1.0.8) (2025-07-29)
 
 
