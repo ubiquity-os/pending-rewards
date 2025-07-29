@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { createClient } from "@supabase/supabase-js";
 import { PERMIT2_ADDRESS } from "@uniswap/permit2-sdk";
 import { Contract } from "ethers";
