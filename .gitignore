@@ -118,3 +118,5 @@ temp/
 *.csv
 nonce-results.csv
 nonce-claimed-results.csv
+pending-rewards.md
+pending-rewards.txt

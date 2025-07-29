@@ -1,12 +1,21 @@
 {
-  "name": "nonce-checker",
+  "name": "@ubiquity-os/pending-rewards",
   "version": "1.0.0",
-  "description": "Standalone tool to check if nonces are claimed on the Permit2 contract",
+  "description": "Standalone tool to check pending rewards by verifying nonces on the Permit2 contract",
   "type": "module",
+  "bin": {
+    "pending-rewards": "./build/index.js"
+  },
+  "main": "./build/index.js",
+  "files": [
+    "build/**/*",
+    "README.md"
+  ],
   "scripts": {
     "start": "bun ./src/index.ts",
     "dev": "bun --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target node --env inline"
+    "build": "bun build ./src/index.ts --outdir ./build --target node --env inline && chmod +x ./build/index.js",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",

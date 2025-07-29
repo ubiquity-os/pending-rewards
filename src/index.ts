@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { createClient } from "@supabase/supabase-js";
 import { PERMIT2_ADDRESS } from "@uniswap/permit2-sdk";
 import { Contract } from "ethers";
@@ -56,7 +57,7 @@ async function main() {
   const logger = new Logger();
   const permit2Address = PERMIT2_ADDRESS;
 
-  logger.section("Nonce Checker - Permit Analysis");
+  logger.section("Pending Rewards Checker - Permit Analysis");
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
@@ -358,11 +359,11 @@ ${userRewardsTable}
 - Unclaimed permits: ${unclaimedPermits.length}
 `;
 
-  const mdFile = path.join(process.cwd(), "pending-rewards.md");
-  writeFileSync(mdFile, markdownContent);
-  logger.stopSpinner("Results written to pending-rewards.md");
+  const txtFile = path.join(process.cwd(), "pending-rewards.txt");
+  writeFileSync(txtFile, markdownContent);
+  logger.stopSpinner("Results written to pending-rewards.txt");
 
-  logger.fileOutput(mdFile);
+  logger.fileOutput(txtFile);
 }
 
 main().catch(console.error);

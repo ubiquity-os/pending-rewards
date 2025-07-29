@@ -14,7 +14,7 @@ export async function fetchGitHubUsername(userId: number): Promise<string> {
   try {
     const response = await fetch(`https://api.github.com/user/${userId}`, {
       headers: {
-        "User-Agent": "nonce-checker",
+        "User-Agent": "@ubiquity-os/pending-rewards",
         ...(process.env.GITHUB_TOKEN && {
           Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
         }),
