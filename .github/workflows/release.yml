@@ -47,7 +47,8 @@ jobs:
 
       - name: Setup NPM authentication
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ./.npmrc
+          ls -la
 
       - name: Publish to NPM
         run: bun publish --access public
