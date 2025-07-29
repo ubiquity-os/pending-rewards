@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.1...v1.0.2) (2025-07-29)
+
+
+### Bug Fixes
+
+* update environment variable name in release workflow for publishing ([7254824](https://github.com/ubiquity-os/pending-rewards/commit/725482424458f9320bb1641194830631b32c4c1a))
+
 ## [1.0.1](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.0...v1.0.1) (2025-07-29)
 
 
