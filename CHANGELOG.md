@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.10](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.9...v1.0.10) (2025-07-29)
+
+
+### Bug Fixes
+
+* extract Supabase query logic into helper functions for reuse and pagination ([c497293](https://github.com/ubiquity-os/pending-rewards/commit/c497293763c587afa5c745c94779b6adaf2223e6))
+
 ## [1.0.9](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.8...v1.0.9) (2025-07-29)
 
 
