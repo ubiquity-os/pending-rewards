@@ -14,6 +14,7 @@ import {
 } from "./helpers/formatting";
 import { fetchGitHubUsernames } from "./helpers/github";
 import { Logger } from "./helpers/logger";
+import { fetchAllPermits, PermitRow } from "./helpers/supabase";
 import {
   ERC20_ABI,
   Erc20Wrapper,
@@ -24,33 +25,6 @@ import { Database } from "./types/database";
 import { ContractAbi } from "./types/permit2";
 
 const permit2Abi = permit2AbiJson as ContractAbi;
-
-interface PermitRow {
-  nonce: number;
-  amount: string;
-  partners: {
-    wallets: {
-      address: string;
-    };
-  };
-  tokens: {
-    address: string;
-    network: number;
-  };
-  users: {
-    id: number;
-    wallets: {
-      address: string;
-    };
-  };
-}
-
-interface SupabaseError {
-  message: string;
-  details?: string;
-  hint?: string;
-  code?: string;
-}
 
 async function main() {
   const logger = new Logger();
@@ -67,20 +41,7 @@ async function main() {
   const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
   logger.startSpinner("Fetching permits from database...");
-  const {
-    data,
-    error,
-  }: { data: PermitRow[] | null; error: SupabaseError | null } = (await supabase
-    .from("permits")
-    .select(
-      "nonce,partners(wallets(address)),tokens(address,network),users:beneficiary_id(id,wallets(address)),amount"
-    )
-    .not("partners", "is", null)
-    .not("tokens", "is", null)
-    .not("users", "is", null)) as {
-    data: PermitRow[] | null;
-    error: SupabaseError | null;
-  };
+  const { data, error } = await fetchAllPermits(supabase, logger);
 
   if (error) {
     logger.stopSpinner("Failed to fetch permits", true);
@@ -164,7 +125,7 @@ async function main() {
       }
 
       const permitData: PermitData = {
-        nonce: permit.nonce,
+        nonce: parseInt(permit.nonce, 10),
         amount: permit.amount,
         partnerAddress,
         tokenAddress,
@@ -262,7 +223,7 @@ async function main() {
           }
 
           const permitData: PermitData = {
-            nonce: permit.nonce,
+            nonce: parseInt(permit.nonce, 10),
             amount: permit.amount,
             partnerAddress,
             tokenAddress,
