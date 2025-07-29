@@ -1,8 +1,7 @@
 {
   "name": "@ubiquity-os/pending-rewards",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Standalone tool to check pending rewards by verifying nonces on the Permit2 contract",
-  "type": "module",
   "bin": {
     "pending-rewards": "./build/index.js"
   },
@@ -14,7 +13,7 @@
   "scripts": {
     "start": "bun ./src/index.ts",
     "dev": "bun --watch ./src/index.ts",
-    "build": "bun build ./src/index.ts --outdir ./build --target node --env inline && chmod +x ./build/index.js",
+    "build": "bun build ./src/index.ts --outdir ./build --target node --env inline --format cjs && echo '#!/usr/bin/env node' | cat - ./build/index.js > temp && mv temp ./build/index.js && chmod +x ./build/index.js",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
