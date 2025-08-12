@@ -40,10 +40,14 @@ cp .env.example .env
 ```
 
 3. Make sure your `.env` file contains:
-```
+
+```env
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+GITHUB_TOKEN=your_github_personal_access_token
 ```
+
+> **Note:** The `GITHUB_TOKEN` is required to fetch GitHub usernames. Without it, user names will show as `user-{id}` format. You can create a personal access token at <https://github.com/settings/tokens>
 
 ## Usage
 
