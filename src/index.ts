@@ -4,6 +4,7 @@ import { Contract } from "ethers";
 import { writeFileSync } from "fs";
 import * as path from "path";
 import permit2AbiJson from "./abi/permit2.json";
+import { getPartnerAllowlist } from "./helpers/config";
 import {
   calculateUserWalletTotals,
   calculateWalletTotals,
@@ -40,8 +41,37 @@ async function main() {
   }
   const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
+  const argv = process.argv.slice(2);
+  const walletsFromArgs: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--wallet" || arg === "-w") {
+      const next = argv[i + 1];
+      if (next && !next.startsWith("-")) {
+        next
+          .split(/[,\n]/)
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0)
+          .forEach((v) => walletsFromArgs.push(v));
+        i++;
+      }
+    } else if (arg.startsWith("--wallet=") || arg.startsWith("-w=")) {
+      const val = arg.split("=")[1] || "";
+      val
+        .split(/[,\n]/)
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0)
+        .forEach((v) => walletsFromArgs.push(v));
+    }
+  }
+
+  const partnerAllowlist = getPartnerAllowlist(logger, walletsFromArgs);
   logger.startSpinner("Fetching permits from database...");
-  const { data, error } = await fetchAllPermits(supabase, logger);
+  const { data: fetchedData, error } = await fetchAllPermits(
+    supabase,
+    logger,
+    partnerAllowlist.size > 0 ? Array.from(partnerAllowlist) : undefined
+  );
 
   if (error) {
     logger.stopSpinner("Failed to fetch permits", true);
@@ -49,11 +79,12 @@ async function main() {
     return;
   }
 
-  if (!data) {
+  if (!fetchedData) {
     logger.stopSpinner("No permits found in database", true);
     return;
   }
 
+  const data = fetchedData;
   logger.stopSpinner(`Found ${data.length} permits to analyze`);
 
   // First, collect all unique GitHub user IDs
@@ -99,14 +130,6 @@ async function main() {
         return null;
       }
 
-      // Show progress for every 50th permit to avoid spam
-      // const shouldLog = completed.count % 50 === 0 || completed.count < 10;
-      // if (shouldLog) {
-      //   console.log(
-      //     `[Progress] Processing permit ${completed.count + 1}/${data.length} (nonce: ${permit.nonce.toString().slice(0, 10)}...)`
-      //   );
-      // }
-
       const permit2Contract = getContract(permit2Address, permit2Abi, network);
       const permit2Wrapper = new Permit2Wrapper(permit2Contract as Contract);
 
@@ -120,9 +143,7 @@ async function main() {
         const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
         const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
         tokenSymbol = await erc20Wrapper.symbol();
-      } catch (symbolError) {
-        // Token symbol fetch failed - continue with UNKNOWN
-      }
+      } catch (symbolError) {}
 
       const permitData: PermitData = {
         nonce: parseInt(permit.nonce, 10),
@@ -137,11 +158,6 @@ async function main() {
       };
 
       completed.count++;
-      // if (shouldLog) {
-      //   console.log(
-      //     `[Progress] Completed ${completed.count}/${data.length} (${isClaimed ? "CLAIMED" : "UNCLAIMED"})`
-      //   );
-      // }
       logger.updateSpinner(
         `Processing permits... ${completed.count}/${data.length} completed`
       );
@@ -218,9 +234,7 @@ async function main() {
             const tokenContract = getContract(tokenAddress, ERC20_ABI, network);
             const erc20Wrapper = new Erc20Wrapper(tokenContract as Contract);
             tokenSymbol = await erc20Wrapper.symbol();
-          } catch (symbolError) {
-            // Token symbol fetch failed - continue with UNKNOWN
-          }
+          } catch (symbolError) {}
 
           const permitData: PermitData = {
             nonce: parseInt(permit.nonce, 10),
