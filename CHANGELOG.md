@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.11](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.10...v1.0.11) (2025-08-12)
+
+
+### Bug Fixes
+
+* add partner allowlist and improve wallet filtering logic ([944b734](https://github.com/ubiquity-os/pending-rewards/commit/944b7341b3c582e469ff7d425e4553502029e1d1))
+* add partner allowlist and improve wallet filtering logic in fetch permits logic ([94fc270](https://github.com/ubiquity-os/pending-rewards/commit/94fc2704ddacc8d9cb4fb3713d4993c97d5bf883))
+
 ## [1.0.10](https://github.com/ubiquity-os/pending-rewards/compare/v1.0.9...v1.0.10) (2025-07-29)
 
 
